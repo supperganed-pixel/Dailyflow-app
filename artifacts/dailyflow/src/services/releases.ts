@@ -1,6 +1,6 @@
 import Constants from "expo-constants";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-export const currentVersion = Constants.expoConfig?.version ?? "1.0.0";
+export const currentVersion = Constants.expoConfig?.version ?? "1.0.3";
 export const releaseRepo =
   process.env.EXPO_PUBLIC_GITHUB_RELEASES_REPO ??
   "supperganed-pixel/dailyflow-releases";

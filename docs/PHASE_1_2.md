@@ -19,4 +19,4 @@ The trigger applies to every inserted or updated payload, including writes made 
 
 ## Checks
 
-`node --test scripts/dailyflow-migration.test.cjs` exercises the migration in local PostgreSQL. `pnpm test:core` covers priority, blocked state, follow-up dates, history, and review calculations. The live Supabase project still needs the migration applied before these server guarantees are active.
+`node --test scripts/dailyflow-migration.test.cjs` exercises the migration in local PostgreSQL. `pnpm test:core` covers priority, blocked state, follow-up dates, history, and review calculations. The migration was applied to the live DailyFlow Supabase project as `20260930184232_dailyflow_phase_1_2`; the trigger, blocked-state RPC, indexes and existing RLS were confirmed afterward.

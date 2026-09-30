@@ -2,7 +2,7 @@ import type { ExpoConfig } from "expo/config";
 const config: ExpoConfig = {
   name: "DailyFlow",
   slug: "dailyflow",
-  version: "1.0.2",
+  version: "1.0.3",
   scheme: "dailyflow",
   orientation: "default",
   userInterfaceStyle: "automatic",
