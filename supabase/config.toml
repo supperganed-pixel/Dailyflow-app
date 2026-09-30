@@ -1,0 +1,17 @@
+project_id = "dailyflow"
+[auth]
+site_url = "http://localhost:4173"
+additional_redirect_urls = ["http://localhost:4173/auth/callback", "http://localhost:4173/auth/callback?flow=recovery", "http://127.0.0.1:4173/auth/callback", "http://127.0.0.1:4173/auth/callback?flow=recovery", "dailyflow://auth/callback", "dailyflow://auth/callback?flow=recovery"]
+minimum_password_length = 12
+[auth.email]
+enable_signup = true
+enable_confirmations = true
+secure_password_change_enabled = true
+[functions.delete-account]
+verify_jwt = false
+
+[auth.third_party.firebase]
+enabled = true
+project_id = "dailyflow-6bd65"
+[functions.delete-firebase-account]
+verify_jwt = false

@@ -1,0 +1,44 @@
+{
+  "cli": {
+    "version": "24.7.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "pnpm": "11.19.0",
+      "node": "24.19.0"
+    },
+    "preview": {
+      "environment": "preview",
+      "autoIncrement": true,
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "pnpm": "11.19.0",
+      "node": "24.19.0"
+    },
+    "production": {
+      "environment": "production",
+      "autoIncrement": true,
+      "android": {
+        "buildType": "app-bundle"
+      },
+      "pnpm": "11.19.0",
+      "node": "24.19.0"
+    }
+  },
+  "submit": {
+    "production": {
+      "android": {
+        "track": "internal",
+        "releaseStatus": "draft"
+      }
+    }
+  }
+}

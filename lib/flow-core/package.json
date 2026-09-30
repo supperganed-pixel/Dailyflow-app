@@ -1,0 +1,10 @@
+{
+  "name": "@workspace/flow-core",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "scripts": { "test": "tsx --test src/*.test.ts", "typecheck": "tsc --noEmit" },
+  "dependencies": { "chrono-node": "^2.8.0", "zod": "catalog:" },
+  "devDependencies": { "tsx": "catalog:", "typescript": "~5.9.3", "@types/node": "catalog:" }
+}
