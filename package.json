@@ -12,6 +12,7 @@
     "build:app": "pnpm --filter @workspace/dailyflow build",
     "check:app": "pnpm --filter @workspace/dailyflow typecheck",
     "test:core": "pnpm --filter @workspace/flow-core test",
+    "test:dailyflow-migration": "node --test scripts/dailyflow-migration.test.cjs",
     "preview:app": "node scripts/preview.cjs"
   },
   "private": true,

@@ -28,6 +28,8 @@ import { StatusBar } from "expo-status-bar";
 import {
   attentionReason,
   attentionSort,
+  blockingReasons,
+  calculateTaskPriority,
   isOpen,
   isToday,
   isVisible,
@@ -55,6 +57,14 @@ import { enableReminders, refreshReminders } from "./reminders";
 import { deleteAccount } from "./api";
 import { AuthProvider, useAuth } from "./auth/AuthProvider";
 import { Skeleton } from "./components/Loading";
+import TodayDashboard, { WaitingPanel } from "./screens/TodayDashboard";
+import {
+  addToDailyFocus,
+  removeFromDailyFocus,
+  completeTask,
+  waitingChange,
+  moveToTomorrow,
+} from "./services/dailyflow";
 import Constants from "expo-constants";
 const Files = lazy(() => import("./screens/Files"));
 const Releases = lazy(() => import("./screens/Releases"));
@@ -133,6 +143,7 @@ function displayDate(date: string | null) {
 }
 function ItemCard({
   item,
+  items,
   onEdit,
   onComplete,
   onSnooze,
@@ -141,6 +152,7 @@ function ItemCard({
   now,
 }: {
   item: FlowItem;
+  items: FlowItem[];
   onEdit: () => void;
   onComplete: () => void;
   onSnooze: () => void;
@@ -150,6 +162,8 @@ function ItemCard({
 }) {
   const c = useTheme();
   const done = item.status === "completed" || item.status === "archived";
+  const priority = calculateTaskPriority(item, items, now);
+  const blocked = item.kind === "task" ? blockingReasons(item, items) : null;
   return (
     <View
       style={[styles.card, { backgroundColor: c.surface, borderColor: c.line }]}
@@ -208,6 +222,12 @@ function ItemCard({
         >
           {item.notes}
         </Text>
+      )}
+      {item.kind === "task" && !done && (
+        <View style={{ marginLeft: 40, gap: 4 }}>
+          <Label small muted>{priority.level[0].toUpperCase() + priority.level.slice(1)} priority{priority.reasons.length ? ` · ${priority.reasons.slice(0, 2).join(" · ")}` : ""}</Label>
+          {blocked?.blocked && <Label small muted>Blocked · {blocked.dependencies.length} task(s), {blocked.waiting.length} waiting item(s)</Label>}
+        </View>
       )}
       <View
         style={[
@@ -445,15 +465,10 @@ function DailyFlow() {
     [flow.items],
   );
   const open = useMemo(() => visible.filter(isOpen), [visible]);
-  const today = useMemo(() => open.filter((i) => isToday(i, now)), [open, now]);
   const inbox = useMemo(() => open.filter((i) => i.status === "inbox"), [open]);
   const waiting = useMemo(
     () => open.filter((i) => i.status === "waiting"),
     [open],
-  );
-  const completed = useMemo(
-    () => visible.filter((i) => i.status === "completed"),
-    [visible],
   );
   const matches = useMemo(
     () =>
@@ -480,7 +495,8 @@ function DailyFlow() {
                 )
               : screen === "History"
                 ? visible.filter((i) =>
-                    ["completed", "archived"].includes(i.status),
+                    ["completed", "archived"].includes(i.status) ||
+                    (i.status === "waiting" && ["resolved", "cancelled"].includes(i.waitingState ?? "waiting")),
                   )
                 : screen === "Schedule"
                   ? open.filter(
@@ -532,9 +548,47 @@ function DailyFlow() {
         status: item.status,
         snoozedUntil: item.snoozedUntil,
         deletedAt: item.deletedAt,
+        completedAt: item.completedAt,
+        archivedAt: item.archivedAt,
+        focusDate: item.focusDate,
+        focusOrder: item.focusOrder,
+        dueAt: item.dueAt,
+        waitingState: item.waitingState,
+        followUpAt: item.followUpAt,
+        lastFollowedUpAt: item.lastFollowedUpAt,
+        waitingHistory: item.waitingHistory,
       }),
     );
   }
+  function focusItem(item: FlowItem) {
+    try {
+      change(item, addToDailyFocus(item, flow.items, now), "Added to today's Focus");
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Could not add this task to Focus.");
+    }
+  }
+  function waitingAction(item: FlowItem, action: "followed_up" | "responded" | "resolved" | "cancelled" | "snoozed") {
+    try {
+      const next = action === "snoozed" ? moveToTomorrow(now).dueAt : null;
+      change(item, waitingChange(item, action, now, next),
+        action === "followed_up" ? "Follow-up recorded" :
+        action === "responded" ? "Response recorded" :
+        action === "resolved" ? "Waiting item resolved" :
+        action === "cancelled" ? "Waiting item cancelled" : "Follow-up moved to tomorrow");
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Could not update this follow-up.");
+    }
+  }
+  const dashboardActions = {
+    items: flow.items,
+    now,
+    onEdit: (item: FlowItem) => setCapture({ item }),
+    onComplete: (item: FlowItem) => change(item, completeTask(item, now), item.status === "completed" ? "Item reopened" : "One less thing on your mind"),
+    onFocus: focusItem,
+    onRemoveFocus: (item: FlowItem) => change(item, removeFromDailyFocus(), "Removed from today's Focus"),
+    onMoveTomorrow: (item: FlowItem) => change(item, moveToTomorrow(now), "Moved to tomorrow at 9 AM"),
+    onWaiting: waitingAction,
+  };
   function snooze(item: FlowItem) {
     setDialog({
       title: "Give it a little time",
@@ -1083,114 +1137,9 @@ function DailyFlow() {
               ) : (
                 flow.ready && (
                   <>
-                    {!query && screen === "Today" && (
-                      <>
-                        <View
-                          style={[styles.brief, { backgroundColor: c.soft }]}
-                        >
-                          <View
-                            style={[
-                              styles.row,
-                              { justifyContent: "space-between" },
-                            ]}
-                          >
-                            <View style={styles.tag}>
-                              <Icon name="sun" size={18} color={c.brand} />
-                              <Text
-                                style={{
-                                  color: c.brand,
-                                  fontWeight: "600",
-                                  fontSize: 12,
-                                  letterSpacing: 1,
-                                }}
-                              >
-                                YOUR DAILY BRIEF
-                              </Text>
-                            </View>
-                            <Label small muted>
-                              Based on your saved items
-                            </Label>
-                          </View>
-                          <Text
-                            style={{
-                              fontSize: 23,
-                              lineHeight: 32,
-                              color: c.ink,
-                              fontWeight: "500",
-                            }}
-                          >
-                            {today.length
-                              ? `${today.length} thing${today.length === 1 ? " needs" : "s need"} your attention today.`
-                              : "Your day has some breathing room."}
-                          </Text>
-                          <Label muted>
-                            {inbox.length
-                              ? `${inbox.length} item${inbox.length === 1 ? " is" : "s are"} ready to review. `
-                              : ""}
-                            {waiting.length
-                              ? `${waiting.length} follow-up${waiting.length === 1 ? " is" : "s are"} on your radar.`
-                              : "Choose one small step and start there."}
-                          </Label>
-                          <View style={[styles.row, { marginTop: 4, gap: 24 }]}>
-                            <View>
-                              <Text style={[styles.stat, { color: c.ink }]}>
-                                {today.length}
-                              </Text>
-                              <Label small muted>
-                                Due / overdue
-                              </Label>
-                            </View>
-                            <View>
-                              <Text style={[styles.stat, { color: c.ink }]}>
-                                {inbox.length}
-                              </Text>
-                              <Label small muted>
-                                To review
-                              </Label>
-                            </View>
-                            <View>
-                              <Text style={[styles.stat, { color: c.ink }]}>
-                                {
-                                  completed.filter(
-                                    (i) =>
-                                      new Date(i.updatedAt).toDateString() ===
-                                      now.toDateString(),
-                                  ).length
-                                }
-                              </Text>
-                              <Label small muted>
-                                Done today
-                              </Label>
-                            </View>
-                          </View>
-                        </View>
-                        <View
-                          style={[
-                            styles.row,
-                            {
-                              justifyContent: "space-between",
-                              flexWrap: "wrap",
-                            },
-                          ]}
-                        >
-                          <Text
-                            style={{
-                              fontSize: 20,
-                              fontWeight: "600",
-                              color: c.ink,
-                            }}
-                          >
-                            Needs attention
-                          </Text>
-                          <Choice
-                            options={["attention", "all", "snoozed"]}
-                            value={filter}
-                            onChange={setFilter}
-                          />
-                        </View>
-                      </>
-                    )}
-                    {!query && screen === "More" ? (
+                    {!query && screen === "Today" ? (
+                      <TodayDashboard {...dashboardActions} />
+                    ) : !query && screen === "More" ? (
                       <View style={{ gap: 12 }}>
                         {screens
                           .filter(
@@ -1234,6 +1183,8 @@ function DailyFlow() {
                           onPress={() => setSettings(true)}
                         />
                       </View>
+                    ) : !query && screen === "Waiting" ? (
+                      <WaitingPanel {...dashboardActions} />
                     ) : !query && screen === "Files" ? (
                       <Suspense fallback={<Skeleton />}>
                         <Files />
@@ -1248,30 +1199,16 @@ function DailyFlow() {
                           <ItemCard
                             key={item.id}
                             item={item}
+                            items={flow.items}
                             now={now}
                             onEdit={() => setCapture({ item })}
                             onAccept={() => setCapture({ item })}
-                            onComplete={() =>
-                              change(
-                                item,
-                                {
-                                  status: ["completed", "archived"].includes(
-                                    item.status,
-                                  )
-                                    ? "active"
-                                    : "completed",
-                                  snoozedUntil: null,
-                                },
-                                ["completed", "archived"].includes(item.status)
-                                  ? "Item reopened"
-                                  : "One less thing on your mind",
-                              )
-                            }
+                            onComplete={() => change(item, completeTask(item, now), item.status === "completed" ? "Item reopened" : "One less thing on your mind")}
                             onSnooze={() => snooze(item)}
                             onArchive={() =>
                               change(
                                 item,
-                                { status: "archived", snoozedUntil: null },
+                                { status: "archived", archivedAt: now.toISOString(), focusDate: null, focusOrder: null, snoozedUntil: null },
                                 "Item archived",
                               )
                             }

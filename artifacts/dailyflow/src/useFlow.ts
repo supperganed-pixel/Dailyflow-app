@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
 import * as Crypto from "expo-crypto";
-import { itemSchema, reconcileSync, type FlowItem } from "@workspace/flow-core";
+import { itemSchema, orderSyncChanges, reconcileSync, type FlowItem } from "@workspace/flow-core";
 import { loadState, saveState, clearOwner, type LocalState } from "./storage";
 import { syncItems, logout } from "./api";
 import { useAuth } from "./auth/AuthProvider";
@@ -88,8 +88,8 @@ export function useFlow() {
     lock.current = true;
     setSyncing(true);
     const generation = epoch.current;
-    const sent = state.current.items
-      .filter((i) => state.current.dirty.includes(i.id))
+    const sent = orderSyncChanges(state.current.items
+      .filter((i) => state.current.dirty.includes(i.id)))
       .slice(0, 500);
     try {
       const remote = await syncItems(sent, state.current.cursor ?? 0);
@@ -111,12 +111,16 @@ export function useFlow() {
           : `Synced at ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`,
       );
     } catch (e) {
-      if (generation === epoch.current)
+      if (generation === epoch.current) {
+        const message = e instanceof Error ? e.message : "Offline. Your changes are queued for sync.";
+        if (message.includes("DAILY_FOCUS_LIMIT_REACHED"))
+          setError("Another device already has 3 Focus tasks for that day. Remove one Focus task, then sync again.");
+        else if (message.includes("CIRCULAR_DEPENDENCY") || message.includes("TASK_DEPENDENCY_NOT_FOUND"))
+          setError("A task dependency could not sync. Edit the task's blocked-by list, then try again.");
         setSyncMessage(
-          e instanceof Error
-            ? e.message
-            : "Offline. Your changes are queued for sync.",
+          message,
         );
+      }
     } finally {
       lock.current = false;
       setSyncing(false);
@@ -151,13 +155,19 @@ export function useFlow() {
     if (id) await clearOwner(id);
   }
   function importItems(items: FlowItem[]) {
+    const source = items.filter((i) => !i.deletedAt);
+    const ids = new Map(source.map((i) => [i.id, Crypto.randomUUID()]));
     const additions = items
       .filter((i) => !i.deletedAt)
       .map((i) => ({
         ...i,
-        id: Crypto.randomUUID(),
+        id: ids.get(i.id)!,
         version: 0,
         source: "import" as const,
+        focusDate: null,
+        focusOrder: null,
+        dependsOnIds: (i.dependsOnIds ?? []).map((id) => ids.get(id)).filter((id): id is string => !!id),
+        relatedTaskId: i.relatedTaskId ? (ids.get(i.relatedTaskId) ?? null) : null,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       }));

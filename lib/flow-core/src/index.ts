@@ -8,6 +8,22 @@ export const itemSchema = z
     kind: z.enum(["task", "note", "link"]),
     status: z.enum(["inbox", "active", "waiting", "completed", "archived"]),
     priority: z.enum(["normal", "important"]),
+    priorityLevel: z.enum(["low", "medium", "high"]).optional(),
+    focusDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+    focusOrder: z.number().int().min(1).max(3).nullable().optional(),
+    completedAt: z.string().datetime().nullable().optional(),
+    archivedAt: z.string().datetime().nullable().optional(),
+    dependsOnIds: z.array(z.string().uuid()).max(25).optional(),
+    relatedTaskId: z.string().uuid().nullable().optional(),
+    requestedAt: z.string().datetime().nullable().optional(),
+    expectedAt: z.string().datetime().nullable().optional(),
+    followUpAt: z.string().datetime().nullable().optional(),
+    lastFollowedUpAt: z.string().datetime().nullable().optional(),
+    waitingState: z.enum(["waiting", "responded", "resolved", "cancelled"]).optional(),
+    waitingHistory: z.array(z.object({
+      at: z.string().datetime(),
+      action: z.enum(["created", "followed_up", "responded", "resolved", "cancelled", "reopened", "snoozed"]),
+    })).max(200).optional(),
     notes: z.string().max(20000),
     person: z.string().max(120),
     source: z.enum(["capture", "share", "import"]),
@@ -28,6 +44,7 @@ export const itemSchema = z
   })
   .strict();
 export type FlowItem = z.infer<typeof itemSchema>;
+export * from "./dailyflow";
 export type FlowStatus = FlowItem["status"];
 export const syncSchema = z.object({ changes: z.array(itemSchema).max(500) });
 export const syncResponseSchema = z.object({
@@ -158,7 +175,8 @@ export function captureSuggestion(text: string, now = new Date()) {
   };
 }
 export function isOpen(item: FlowItem) {
-  return !item.deletedAt && !["completed", "archived"].includes(item.status);
+  return !item.deletedAt && !["completed", "archived"].includes(item.status) &&
+    !(item.status === "waiting" && ["resolved", "cancelled"].includes(item.waitingState ?? "waiting"));
 }
 export function isVisible(item: FlowItem, now = new Date()) {
   return (
@@ -179,7 +197,9 @@ export function isToday(item: FlowItem, now = new Date()) {
 }
 export function attentionReason(item: FlowItem, now = new Date()) {
   if (item.status === "inbox") return "Ready for your review";
-  if (item.dueAt && Date.parse(item.dueAt) < +now)
+  if (item.status === "waiting" && item.waitingState === "responded") return "Response received";
+  const due = item.status === "waiting" ? (item.followUpAt === undefined ? item.dueAt : item.followUpAt) : item.dueAt;
+  if (due && Date.parse(due) < +now)
     return item.status === "waiting" ? "Follow-up is due" : "Past its due time";
   if (isToday(item, now))
     return item.status === "waiting" ? "Follow up today" : "Due today";
@@ -238,6 +258,8 @@ export function reconcileSync(
         title: `${item.title.slice(0, 220)} (local copy)`,
         version: 0,
         deletedAt: null,
+        focusDate: null,
+        focusOrder: null,
         updatedAt: new Date().toISOString(),
       };
       result.set(copy.id, copy);

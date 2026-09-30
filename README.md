@@ -10,6 +10,7 @@ An Expo Android and responsive web application for tasks, notes, follow-ups and 
 - Public GitHub release history, direct APK downloads, release dates/counts and a cached startup update notice.
 - Responsive navigation, light/dark/system themes, accessible form labels, loading placeholders, reduced-motion-aware transitions, toast feedback and paginated lists.
 - A four-step getting-started guide opens for new empty accounts and remains available from More and Settings.
+- Focus Today (up to three tasks), explained priority, task dependencies, follow-up history, and an end-of-day review. See [deployment notes](docs/PHASE_1_2.md).
 - Local date suggestions, task completion/undo, snoozing, reminders, share-sheet text capture, JSON backup/import.
 
 ## Start

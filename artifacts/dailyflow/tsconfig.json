@@ -9,5 +9,6 @@
     "src/**/*.tsx",
     "index.ts",
     "app.config.ts"
-  ]
+  ],
+  "exclude": ["src/**/*.test.ts"]
 }
