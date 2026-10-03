@@ -50,7 +50,16 @@ export async function refreshReminders(
   quiet: boolean,
 ) {
   if (Platform.OS === "web") return;
-  await Notifications.cancelAllScheduledNotificationsAsync();
+  const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+  await Promise.all(
+    scheduled
+      .filter((notification) =>
+        typeof notification.content.data?.itemId === "string",
+      )
+      .map((notification) =>
+        Notifications.cancelScheduledNotificationAsync(notification.identifier),
+      ),
+  );
   if (!enabled || !(await Notifications.getPermissionsAsync()).granted) return;
   const next = items
     .filter(
