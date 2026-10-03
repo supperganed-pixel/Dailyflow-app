@@ -2,14 +2,13 @@ import type { ExpoConfig } from "expo/config";
 const config: ExpoConfig = {
   name: "DailyFlow",
   slug: "dailyflow",
-  version: "1.0.4",
+  version: "1.0.5",
   scheme: "dailyflow",
   orientation: "default",
   userInterfaceStyle: "automatic",
   icon: "./assets/images/icon.png",
   android: {
     package: process.env.ANDROID_PACKAGE ?? "com.newflow1.dailyflow",
-    versionCode: 1,
     adaptiveIcon: {
       foregroundImage: "./assets/images/icon.png",
       backgroundColor: "#102A29",
