@@ -937,7 +937,7 @@ function DailyFlow() {
         </>
       )}
       <Label small muted>
-        Version {Constants.expoConfig?.version ?? "1.0.4"} · DailyFlow
+        Version {Constants.expoConfig?.version ?? "1.0.5"} · DailyFlow
       </Label>
     </View>
   );
