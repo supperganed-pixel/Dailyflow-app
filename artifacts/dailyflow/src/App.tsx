@@ -1,3 +1,6 @@
+import { ProfileProvider, useProfile } from "./ProfileContext";
+import { AppearanceProvider, AppearanceSettings, AnimatedToggle, accentPalette, useAppearance } from "./appearance";
+import { TaskMotion, Reveal } from "./components/TaskMotion";
 import React, {
   lazy,
   Suspense,
@@ -53,7 +56,7 @@ import Account from "./Account";
 import ShareCapture from "./ShareCapture";
 import { exportBackup, readBackup } from "./backup";
 import { preferences } from "./storage";
-import { enableReminders, refreshReminders } from "./reminders";
+import { enableReminders, refreshReminders, sendTestReminder } from "./reminders";
 import { deleteAccount } from "./api";
 import { AuthProvider, useAuth } from "./auth/AuthProvider";
 import { Skeleton } from "./components/Loading";
@@ -161,6 +164,7 @@ function ItemCard({
   now: Date;
 }) {
   const c = useTheme();
+  const [expanded, setExpanded] = useState(false);
   const done = item.status === "completed" || item.status === "archived";
   const priority = calculateTaskPriority(item, items, now);
   const blocked = item.kind === "task" ? blockingReasons(item, items) : null;
@@ -186,8 +190,9 @@ function ItemCard({
         </Pressable>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`Edit ${item.title}`}
-          onPress={onEdit}
+          accessibilityLabel={`Details for ${item.title}`}
+          accessibilityState={{ expanded }}
+          onPress={() => setExpanded(!expanded)}
           style={{ flex: 1, gap: 6 }}
         >
           <Text
@@ -215,9 +220,11 @@ function ItemCard({
           <Icon name="star" size={17} color={c.brand} />
         )}
       </View>
+      <Button title={expanded ? "Hide details" : "Show details"} icon={expanded ? "chevron-up" : "chevron-down"} onPress={() => setExpanded(!expanded)} />
+      <Reveal open={expanded}>
       {!!item.notes && (
         <Text
-          numberOfLines={2}
+          numberOfLines={undefined}
           style={{ color: c.muted, lineHeight: 21, marginLeft: 40 }}
         >
           {item.notes}
@@ -277,6 +284,8 @@ function ItemCard({
           </Text>
         </Pressable>
       )}
+      <Button title="Edit item" onPress={onEdit} />
+      </Reveal>
     </View>
   );
 }
@@ -308,7 +317,7 @@ export default function App() {
     <ErrorBoundary>
       <SafeAreaProvider>
         <AuthProvider>
-          <DailyFlow />
+          <ProfileProvider><AppearanceProvider><DailyFlow /></AppearanceProvider></ProfileProvider>
         </AuthProvider>
       </SafeAreaProvider>
     </ErrorBoundary>
@@ -317,14 +326,14 @@ export default function App() {
 function DailyFlow() {
   const auth = useAuth();
   const flow = useFlow();
+  const { profile } = useProfile();
   const system = useColorScheme();
   const { width } = useWindowDimensions();
   const wide = width >= 900;
   const [theme, setTheme] = useState("system");
-  const c =
-    theme === "dark" || (theme === "system" && system === "dark")
-      ? dark
-      : light;
+  const appearance = useAppearance();
+  const isDark = theme === "dark" || (theme === "system" && system === "dark");
+  const c = useMemo(() => accentPalette(isDark ? dark : light, appearance.accent, isDark), [isDark, appearance.accent]);
   const [screen, setScreen] = useState<Screen>("Today");
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("attention");
@@ -333,6 +342,7 @@ function DailyFlow() {
     shared?: string;
   } | null>(null);
   const [account, setAccount] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const [settings, setSettings] = useState(false);
   const [tutorial, setTutorial] = useState(false);
   const [dialog, setDialog] = useState<Dialog | null>(null);
@@ -355,6 +365,7 @@ function DailyFlow() {
     if (auth.loading) return;
     if (!auth.session) {
       setCapture(null);
+      setProfileOpen(false);
       setSettings(false);
       setTutorial(false);
       setDialog(null);
@@ -722,6 +733,7 @@ function DailyFlow() {
       <Label small muted>
         APPEARANCE
       </Label>
+      <AnimatedToggle label="Dark mode" value={isDark} onChange={(enabled) => { const value = enabled ? "dark" : "light"; setTheme(value); void run(() => preferences.set("theme", value)); }} />
       <Choice
         options={["light", "dark", "system"]}
         value={theme}
@@ -730,6 +742,7 @@ function DailyFlow() {
           void run(() => preferences.set("theme", value));
         }}
       />
+      <AppearanceSettings />
       <View style={[styles.row, { justifyContent: "space-between" }]}>
         <View style={{ flex: 1 }}>
           <Label>Device reminders</Label>
@@ -751,6 +764,24 @@ function DailyFlow() {
               }
               await preferences.set("reminders", String(value));
               setReminders(value);
+            })
+          }
+        />
+      </View>
+      <View style={{ gap: 8 }}>
+        <Label small muted>
+          On Android, scheduled reminders appear in the notification bar even
+          when DailyFlow is in the background or closed. The app must be opened
+          after creating or changing a task so its reminder can be scheduled.
+        </Label>
+        <Button
+          title="Send test notification"
+          icon="bell"
+          disabled={Platform.OS === "web" || busy}
+          onPress={() =>
+            void run(async () => {
+              await sendTestReminder();
+              notify("Test notification scheduled for about 3 seconds from now.");
             })
           }
         />
@@ -831,9 +862,6 @@ function DailyFlow() {
             ACCOUNT
           </Label>
           <Label>{flow.session.user.email}</Label>
-          <Suspense fallback={<Skeleton />}>
-            <Profile />
-          </Suspense>
           <Button
             title="Import items from the previous app"
             disabled={busy}
@@ -909,7 +937,7 @@ function DailyFlow() {
         </>
       )}
       <Label small muted>
-        Version {Constants.expoConfig?.version ?? "1.0.3"} · DailyFlow
+        Version {Constants.expoConfig?.version ?? "1.0.4"} · DailyFlow
       </Label>
     </View>
   );
@@ -1034,11 +1062,29 @@ function DailyFlow() {
                 >
                   <Icon name={flow.session ? "cloud" : "shield"} size={18} />
                 </Pressable>
-                <View style={[styles.avatar, { backgroundColor: c.soft }]}>
-                  <Text style={{ fontWeight: "600", color: c.ink }}>
-                    {flow.session?.user.email?.[0]?.toUpperCase() ?? "D"}
-                  </Text>
-                </View>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={profile?.display_name ? `${profile.display_name}'s avatar` : "Your avatar"}
+                  accessibilityHint={flow.session ? "Opens your profile" : "Opens account sign in"}
+                  onPress={() => flow.session ? setProfileOpen(true) : setAccount(true)}
+                  style={[styles.avatar, { backgroundColor: c.soft }]}
+                >
+                  {profile?.avatar && profile.avatar !== "initials" ? (
+                    <Icon name={profile.avatar} size={18} color={c.brand} />
+                  ) : (
+                    <Text style={{ fontWeight: "600", color: c.ink }}>
+                      {profile?.display_name
+                        ?.split(/\s+/)
+                        .filter(Boolean)
+                        .slice(0, 2)
+                        .map((part) => part[0])
+                        .join("")
+                        .toUpperCase() ||
+                        flow.session?.user.email?.[0]?.toUpperCase() ||
+                        "D"}
+                    </Text>
+                  )}
+                </Pressable>
               </View>
             </View>
             <ScrollView
@@ -1196,14 +1242,14 @@ function DailyFlow() {
                     ) : sorted.length ? (
                       <View style={{ gap: 12 }}>
                         {sorted.slice(0, limit).map((item) => (
-                          <ItemCard
-                            key={item.id}
+                          <TaskMotion key={item.id} done={item.status === "completed" || item.status === "archived"} onComplete={() => dashboardActions.onComplete(item)} onTomorrow={item.kind === "task" ? () => dashboardActions.onMoveTomorrow(item) : undefined} onFocus={item.kind === "task" && item.status === "active" ? () => focusItem(item) : undefined}>
+                          {(complete) => <ItemCard
                             item={item}
                             items={flow.items}
                             now={now}
                             onEdit={() => setCapture({ item })}
                             onAccept={() => setCapture({ item })}
-                            onComplete={() => change(item, completeTask(item, now), item.status === "completed" ? "Item reopened" : "One less thing on your mind")}
+                            onComplete={complete}
                             onSnooze={() => snooze(item)}
                             onArchive={() =>
                               change(
@@ -1212,7 +1258,8 @@ function DailyFlow() {
                                 "Item archived",
                               )
                             }
-                          />
+                          />}
+                          </TaskMotion>
                         ))}
                         {sorted.length > limit && (
                           <Button
@@ -1360,6 +1407,14 @@ function DailyFlow() {
               notify("Account connected");
             }}
           />,
+        )}
+        {sheet(
+          profileOpen,
+          "Your profile",
+          () => setProfileOpen(false),
+          <Suspense fallback={<Skeleton />}>
+            <Profile />
+          </Suspense>,
         )}
         {sheet(
           settings,
@@ -1557,3 +1612,4 @@ const styles = StyleSheet.create({
     gap: 12,
   },
 });
+
