@@ -2,25 +2,46 @@ import { Platform } from "react-native";
 import * as Notifications from "expo-notifications";
 import { isOpen, type FlowItem } from "@workspace/flow-core";
 
+const REMINDER_CHANNEL = "dailyflow-reminders-v2";
+
 if (Platform.OS !== "web")
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
       shouldShowBanner: true,
       shouldShowList: true,
-      shouldPlaySound: false,
+      shouldPlaySound: true,
       shouldSetBadge: false,
     }),
   });
 export async function enableReminders() {
   if (Platform.OS === "web")
     throw new Error("Device reminders are available in the Android app.");
-  await Notifications.setNotificationChannelAsync("reminders", {
+  await Notifications.setNotificationChannelAsync(REMINDER_CHANNEL, {
     name: "DailyFlow reminders",
-    importance: Notifications.AndroidImportance.DEFAULT,
-    sound: null,
+    importance: Notifications.AndroidImportance.HIGH,
+    sound: "default",
   });
   const result = await Notifications.requestPermissionsAsync();
   return result.granted;
+}
+export async function sendTestReminder() {
+  if (Platform.OS === "web")
+    throw new Error("Test notifications are available in the Android app.");
+  if (!(await enableReminders()))
+    throw new Error("Allow notifications in Android settings, then try again.");
+  await Notifications.scheduleNotificationAsync({
+    identifier: "dailyflow-test",
+    content: {
+      title: "DailyFlow notifications are ready",
+      body: "Scheduled reminders can appear here while the app is closed.",
+      data: { test: true },
+    },
+    trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+      seconds: 3,
+      channelId: REMINDER_CHANNEL,
+    },
+  });
 }
 // Only schedule future reminders; the Today view retains overdue work.
 export async function refreshReminders(
@@ -64,7 +85,8 @@ export async function refreshReminders(
       trigger: {
         type: Notifications.SchedulableTriggerInputTypes.DATE,
         date,
-        channelId: "reminders",
+        channelId: REMINDER_CHANNEL,
       },
     });
 }
+
