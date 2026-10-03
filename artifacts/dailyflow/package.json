@@ -1,6 +1,6 @@
 {
   "name": "@workspace/dailyflow",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "private": true,
   "main": "index.ts",
   "scripts": {
@@ -45,3 +45,4 @@
     "typescript": "~6.0.3"
   }
 }
+
