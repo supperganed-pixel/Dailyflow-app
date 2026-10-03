@@ -1,5 +1,9 @@
-import type { ReactNode } from "react";
-import { Text, View } from "react-native";
+import { useProfile } from "../ProfileContext";
+import { useState, type ReactNode } from "react";
+import { useAppearance } from "../appearance";
+import { TaskMotion, Reveal } from "../components/TaskMotion";
+import { FocusProgress } from "../components/FocusProgress";
+import { Pressable, Text, View } from "react-native";
 import {
   blockingReasons,
   calculateTaskPriority,
@@ -41,33 +45,36 @@ function TaskCard({ item, actions, focusAction }: {
   focusAction?: "add" | "remove";
 }) {
   const c = useTheme();
+  const appearance = useAppearance();
+  const [expanded, setExpanded] = useState(false);
   const priority = calculateTaskPriority(item, actions.items, actions.now);
   const blocked = blockingReasons(item, actions.items);
-  return (
-    <View style={{ padding: 18, borderWidth: 1, borderColor: c.line, borderRadius: 16, backgroundColor: c.surface, gap: 10 }}>
-      <Text style={{ color: c.ink, fontSize: 17, fontWeight: "600" }}>{item.title}</Text>
-      {item.dueAt && <Label small muted>Due {new Date(item.dueAt).toLocaleString()}</Label>}
-      <View style={[s.wrap, { alignItems: "center" }]}>
-        <Text style={{ color: priority.level === "high" ? c.brand : c.muted, fontWeight: "600" }}>
-          {priority.level[0].toUpperCase() + priority.level.slice(1)} priority
-        </Text>
-        {priority.reasons.slice(0, 2).map((reason) => <Label small muted key={reason}>· {reason}</Label>)}
+  const done = item.status === "completed";
+  return <TaskMotion done={done} onComplete={() => actions.onComplete(item)} onTomorrow={() => actions.onMoveTomorrow(item)} onFocus={focusAction === "add" ? () => actions.onFocus(item) : undefined}>
+    {(complete, completing) => <View style={{ padding: appearance.layout === "compact" ? 13 : 20, borderWidth: 1, borderColor: done || completing ? c.brand : c.line, borderRadius: 20, backgroundColor: done || completing ? c.soft : c.surface, gap: 12, shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.06, shadowRadius: 12, elevation: 2 }}>
+      <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
+        <Pressable accessibilityRole="checkbox" accessibilityLabel={(done ? "Reopen " : "Complete ") + item.title} accessibilityState={{ checked: done || completing, disabled: completing }} disabled={completing} onPress={complete} style={{ minWidth: 44, minHeight: 44, justifyContent: "center", alignItems: "center" }}><Icon name={done || completing ? "check-square" : "square"} size={25} color={c.brand} /></Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel={"Details for " + item.title} accessibilityState={{ expanded }} onPress={() => setExpanded(!expanded)} style={{ flex: 1, minHeight: 44, justifyContent: "center", gap: 5 }}>
+          <Text style={{ color: c.ink, fontSize: 17, fontWeight: "600", textDecorationLine: done || completing ? "line-through" : "none" }}>{item.title}</Text>
+          <Label small muted>{done ? "Completed" : priority.level + " priority"}{blocked.blocked ? " · Blocked" : ""}</Label>
+        </Pressable><Icon name={expanded ? "chevron-up" : "chevron-down"} size={18} color={c.muted} />
       </View>
-      {blocked.blocked && (
-        <View style={{ backgroundColor: c.soft, padding: 12, borderRadius: 10, gap: 3 }}>
+      {item.dueAt && <Label small muted>Due {new Date(item.dueAt).toLocaleString()}</Label>}
+      <Reveal open={expanded}>
+        {!!item.notes && <Label>{item.notes}</Label>}
+        {priority.reasons.map((reason) => <Label small muted key={reason}>{reason}</Label>)}
+        {blocked.blocked && <View style={{ padding: 12, borderRadius: 12, backgroundColor: c.soft, gap: 4 }}>
           <Label>Blocked</Label>
           {blocked.dependencies.map((dependency) => <Label small muted key={dependency.id}>Waiting for {dependency.title}</Label>)}
           {blocked.waiting.map((waiting) => <Label small muted key={waiting.id}>Waiting for {waiting.person || waiting.title}</Label>)}
+        </View>}
+        <View style={s.wrap}>
+          <Button title="Edit task" onPress={() => actions.onEdit(item)} />
+          {focusAction === "remove" && <Button title="Remove Focus" onPress={() => actions.onRemoveFocus(item)} />}
         </View>
-      )}
-      <View style={s.wrap}>
-        <Button title={item.status === "completed" ? "Reopen" : "Complete"} onPress={() => actions.onComplete(item)} />
-        {focusAction === "add" && <Button title="Add to Focus" onPress={() => actions.onFocus(item)} />}
-        {focusAction === "remove" && <Button title="Remove Focus" onPress={() => actions.onRemoveFocus(item)} />}
-        <Button title="Details" onPress={() => actions.onEdit(item)} />
-      </View>
-    </View>
-  );
+      </Reveal>
+    </View>}
+  </TaskMotion>;
 }
 
 export function WaitingCard({ item, actions }: { item: FlowItem; actions: Actions }) {
@@ -106,7 +113,9 @@ export function WaitingPanel(actions: Actions) {
 }
 
 export default function TodayDashboard(actions: Actions) {
+  const { profile } = useProfile();
   const c = useTheme();
+  const appearance = useAppearance();
   const brief = getDailyBrief(actions.items, actions.now);
   const review = getEndOfDayReview(actions.items, actions.now);
   const focusIds = new Set(brief.dailyFocus.map((item) => item.id));
@@ -115,10 +124,11 @@ export default function TodayDashboard(actions: Actions) {
   const dueToday = brief.dueToday.filter((item) => !focusIds.has(item.id));
   const topPriority = brief.topPriority.filter((item) => !focusIds.has(item.id) && !dueIds.has(item.id));
   return (
-    <View style={{ gap: 26 }}>
-      <View style={{ backgroundColor: c.soft, padding: 24, borderRadius: 20, gap: 12 }}>
-        <Text accessibilityRole="header" style={{ color: c.ink, fontSize: 24, fontWeight: "600" }}>{dailyGreeting(actions.now)} 👋</Text>
-        <Label muted>Choose a few things that matter today. Nothing moves or completes without you.</Label>
+    <View style={{ gap: appearance.layout === "compact" ? 18 : 28 }}>
+      <View style={{ backgroundColor: c.soft, padding: 24, borderRadius: 24, gap: 12, overflow: "hidden", borderWidth: 1, borderColor: c.line }}>
+        {appearance.depth && <View pointerEvents="none" accessible={false} style={{ position: "absolute", right: -30, top: -55, width: 155, height: 155, borderRadius: 45, backgroundColor: c.brand, opacity: 0.12, transform: [{ perspective: 500 }, { rotateX: "25deg" }, { rotateZ: "32deg" }], shadowColor: c.brand, shadowOpacity: 0.4, shadowRadius: 20, shadowOffset: { width: 0, height: 10 } }} />}
+        <Text accessibilityRole="header" style={{ color: c.ink, fontSize: 24, fontWeight: "600" }}>{appearance.greeting.trim() || (dailyGreeting(actions.now) + (profile?.display_name ? `, ${profile.display_name}` : ""))}</Text>
+        <Label muted>Choose a few things that matter today. Swipe a task for quick actions.</Label>
         <View style={[s.wrap, { gap: 16 }]}>
           <Label>{brief.counts.dueToday} due today</Label>
           <Label>{brief.counts.overdue} overdue</Label>
@@ -126,6 +136,7 @@ export default function TodayDashboard(actions: Actions) {
           <Label>{brief.counts.followUps} follow-ups</Label>
           <Label>{brief.counts.completedToday} completed</Label>
         </View>
+        <FocusProgress completed={review.focusCompleted} total={review.focusTotal} day={actions.now.toDateString()} />
       </View>
       <Section title="Focus Today" count={brief.dailyFocus.length} empty="Choose up to 3 tasks to focus on today.">
         <View style={{ gap: 12 }}>
@@ -173,3 +184,4 @@ export default function TodayDashboard(actions: Actions) {
     </View>
   );
 }
+
