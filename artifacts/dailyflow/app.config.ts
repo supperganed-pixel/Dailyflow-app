@@ -2,7 +2,7 @@ import type { ExpoConfig } from "expo/config";
 const config: ExpoConfig = {
   name: "DailyFlow",
   slug: "dailyflow",
-  version: "1.0.3",
+  version: "1.0.4",
   scheme: "dailyflow",
   orientation: "default",
   userInterfaceStyle: "automatic",
@@ -49,3 +49,4 @@ const config: ExpoConfig = {
   owner: process.env.EXPO_OWNER ?? "newflow1",
 };
 export default config;
+
