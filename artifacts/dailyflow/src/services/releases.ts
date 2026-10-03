@@ -1,6 +1,6 @@
 import Constants from "expo-constants";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-export const currentVersion = Constants.expoConfig?.version ?? "1.0.4";
+export const currentVersion = Constants.expoConfig?.version ?? "1.0.5";
 export const releaseRepo =
   process.env.EXPO_PUBLIC_GITHUB_RELEASES_REPO ??
   "supperganed-pixel/dailyflow-releases";
@@ -22,6 +22,8 @@ export type Release = {
   assets: ReleaseAsset[];
 };
 type Cache = { at: number; etag: string; releases: Release[] };
+type GitHubAsset = Record<string, unknown>;
+type GitHubRelease = Record<string, unknown>;
 const ttl = 6 * 60 * 60 * 1000;
 const cacheKey = `dailyflow.releases.v2.${releaseRepo}`;
 let pending: Promise<{ releases: Release[]; stale: boolean }> | undefined;
@@ -56,8 +58,9 @@ function parseReleases(value: unknown): Release[] {
   return (
     value
       .filter(
-        (r) =>
+        (r): r is GitHubRelease & { tag_name: string; html_url: string } =>
           r &&
+          typeof r === "object" &&
           !r.draft &&
           typeof r.tag_name === "string" &&
           typeof r.html_url === "string" &&
@@ -74,12 +77,17 @@ function parseReleases(value: unknown): Release[] {
         html_url: r.html_url,
         assets: (Array.isArray(r.assets) ? r.assets : [])
           .filter(
-            (a: any) =>
+            (a): a is GitHubAsset & {
+              name: string;
+              browser_download_url: string;
+            } =>
+              !!a &&
+              typeof a === "object" &&
               typeof a.name === "string" &&
               /\.apk$/i.test(a.name) &&
               safeReleaseUrl(a.browser_download_url, true),
           )
-          .map((a: any) => ({
+          .map((a) => ({
             id: Number(a.id),
             name: a.name,
             size: Number(a.size),
